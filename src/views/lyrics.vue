@@ -232,10 +232,10 @@
           <div
             v-show="!noLyric"
             ref="lyricsContainer"
-            class="lyrics-container"
-            :style="lyricFontSize"
+            :class="{ 'lyrics-container': true, scroll: lyricScrolling }"
+            :style="[lyricFontSize, { top: lyriclistscroll + 'px' }]"
           >
-            <div id="line-1" class="line"></div>
+            <div id="line-1" :style="`height:${highlightLocationpx}px`"></div>
             <div
               v-for="(line, index) in lyricToShow"
               :id="`line${index}`"
@@ -335,10 +335,19 @@ export default {
       date: this.formatTime(new Date()),
       isFullscreen: !!document.fullscreenElement,
       rightClickLyric: null,
+      highlightLocation: 20,
+      offset: 200,
+      lyricScrolling: false,
+      lyriclistscroll: 0,
     };
   },
   computed: {
     ...mapState(['player', 'settings', 'showLyrics']),
+    highlightLocationpx() {
+      return (
+        document.documentElement.clientHeight * (this.highlightLocation / 100)
+      );
+    },
     currentTrack() {
       return this.player.currentTrack;
     },
@@ -605,6 +614,7 @@ export default {
       });
       if (window.getSelection().toString().length === 0 && !jumpFlag) {
         this.player.seek(value);
+        this.lyricScrolling = false;
       }
       if (startPlay === true) {
         this.player.play();
@@ -626,22 +636,28 @@ export default {
       }
     },
     setLyricsInterval() {
+      const docEle = document.documentElement;
+      const list = this.$refs.lyricsContainer;
       this.lyricsInterval = setInterval(() => {
         const progress = this.player.seek(null, false) ?? 0;
         let oldHighlightLyricIndex = this.highlightLyricIndex;
         this.highlightLyricIndex = this.lyric.findIndex((l, index) => {
           const nextLyric = this.lyric[index + 1];
           return (
-            progress >= l.time && (nextLyric ? progress < nextLyric.time : true)
+            progress + this.offset / 1000 >= l.time &&
+            (nextLyric ? progress + this.offset / 1000 < nextLyric.time : true)
           );
         });
         if (oldHighlightLyricIndex !== this.highlightLyricIndex) {
           const el = document.getElementById(`line${this.highlightLyricIndex}`);
-          if (el)
-            el.scrollIntoView({
-              behavior: 'smooth',
-              block: 'center',
-            });
+          if (el && !this.lyricScrolling) {
+            let willto = -el.offsetTop + this.highlightLocationpx;
+            if (willto < -list.offsetHeight + docEle.clientHeight) {
+              willto = -list.offsetHeight + docEle.clientHeight;
+            }
+            if (willto > 0) willto = 0;
+            this.lyriclistscroll = willto;
+          }
         }
       }, 50);
     },
@@ -675,6 +691,25 @@ export default {
     mute() {
       this.player.mute();
     },
+  },
+  mounted() {
+    const list = this.$refs.lyricsContainer;
+    const docEle = document.documentElement;
+    let timer;
+    list.addEventListener('wheel', e => {
+      this.lyricScrolling = true;
+      let willto = this.lyriclistscroll - e.deltaY;
+      if (willto < -list.offsetHeight + docEle.clientHeight) {
+        willto = -list.offsetHeight + docEle.clientHeight;
+      }
+      if (willto > 0) willto = 0;
+      this.lyriclistscroll = willto;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        this.lyricScrolling = false;
+        timer = null;
+      }, 3000);
+    });
   },
 };
 </script>
@@ -934,43 +969,73 @@ export default {
 }
 
 .right-side {
+  position: relative;
   flex: 1;
   font-weight: 600;
+  font-size: 22px;
   color: var(--color-text);
-  margin-right: 24px;
+  margin-right: 60px;
   z-index: 0;
 
   .lyrics-container {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
+    position: absolute;
+    top: 0;
     padding-left: 78px;
     max-width: 460px;
-    overflow-y: auto;
-    transition: 0.5s;
+    transition: 0.5s cubic-bezier(0.84, 0.03, 0.5, 1);
     scrollbar-width: none; // firefox
-
+    &.scroll {
+      transition: 0.2s !important;
+    }
     .line {
+      position: relative;
       margin: 2px 0;
       padding: 12px 18px;
       transition: 0.5s;
       border-radius: 12px;
+      transform-origin: left;
+      &::before {
+        content: '';
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: calc(100% + 10px);
+        height: calc(100% + 10px);
+        background-color: var(--color-secondary-bg-for-transparent);
+        transform: translate(-50%, -50%);
+        border-radius: 10px;
+        transition: 0.35s;
+        opacity: 0;
+      }
+      &:hover::before {
+        opacity: 1;
+        width: calc(100% - 10px);
+        height: calc(100% - 10px);
+      }
+      &.highlight {
+        transform: scale(1.1);
+      }
+      &.highlight div.content {
+        span {
+          opacity: 0.98;
+        }
 
-      &:hover {
-        background: var(--color-secondary-bg-for-transparent);
+        span.translation {
+          opacity: 0.65;
+        }
       }
 
       .content {
         transform-origin: center left;
         transform: scale(0.95);
-        transition: all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        transition: all 0.5s cubic-bezier(0.84, 0.03, 0.5, 1);
         user-select: none;
 
         span {
           opacity: 0.28;
           cursor: default;
           font-size: 1em;
-          transition: all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+          transition: all 0.5s cubic-bezier(0.84, 0.03, 0.5, 1);
         }
 
         span.translation {
@@ -980,37 +1045,13 @@ export default {
       }
     }
 
-    .line#line-1:hover {
-      background: unset;
-    }
-
     .translation {
       margin-top: 0.1em;
-    }
-
-    .highlight div.content {
-      transform: scale(1);
-      span {
-        opacity: 0.98;
-        display: inline-block;
-      }
-
-      span.translation {
-        opacity: 0.65;
-      }
     }
   }
 
   ::-webkit-scrollbar {
     display: none;
-  }
-
-  .lyrics-container .line:first-child {
-    margin-top: 50vh;
-  }
-
-  .lyrics-container .line:last-child {
-    margin-bottom: calc(50vh - 128px);
   }
 }
 
