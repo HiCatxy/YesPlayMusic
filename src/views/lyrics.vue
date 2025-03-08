@@ -227,15 +227,14 @@
           </div>
         </div>
       </div>
-      <div class="right-side">
+      <div class="right-side" ref="scrollbox">
         <transition name="slide-fade">
           <div
             v-show="!noLyric"
             ref="lyricsContainer"
             :class="{ 'lyrics-container': true, scroll: lyricScrolling }"
-            :style="[lyricFontSize, { top: lyriclistscroll + 'px' }]"
+            :style="[lyricFontSize, { top: scroll + 'px' }]"
           >
-            <div id="line-1" :style="`height:${highlightLocationpx}px`"></div>
             <div
               v-for="(line, index) in lyricToShow"
               :id="`line${index}`"
@@ -338,7 +337,7 @@ export default {
       highlightLocation: 20,
       offset: 200,
       lyricScrolling: false,
-      lyriclistscroll: 0,
+      scroll: 200,
     };
   },
   computed: {
@@ -613,8 +612,8 @@ export default {
         }
       });
       if (window.getSelection().toString().length === 0 && !jumpFlag) {
+      this.lyricScrolling = false;
         this.player.seek(value);
-        this.lyricScrolling = false;
       }
       if (startPlay === true) {
         this.player.play();
@@ -635,9 +634,16 @@ export default {
         }
       }
     },
-    setLyricsInterval() {
-      const docEle = document.documentElement;
+    scrollto(willto){
       const list = this.$refs.lyricsContainer;
+      const docEle = document.documentElement
+      if (willto < -list.offsetHeight + docEle.clientHeight - 200) {
+        willto = -list.offsetHeight + docEle.clientHeight - 200;
+      }
+      if (willto > 200) willto = 200;
+      this.scroll = willto;
+    },
+    setLyricsInterval() {
       this.lyricsInterval = setInterval(() => {
         const progress = this.player.seek(null, false) ?? 0;
         let oldHighlightLyricIndex = this.highlightLyricIndex;
@@ -651,12 +657,7 @@ export default {
         if (oldHighlightLyricIndex !== this.highlightLyricIndex) {
           const el = document.getElementById(`line${this.highlightLyricIndex}`);
           if (el && !this.lyricScrolling) {
-            let willto = -el.offsetTop + this.highlightLocationpx;
-            if (willto < -list.offsetHeight + docEle.clientHeight) {
-              willto = -list.offsetHeight + docEle.clientHeight;
-            }
-            if (willto > 0) willto = 0;
-            this.lyriclistscroll = willto;
+            this.scrollto(-el.offsetTop + this.highlightLocationpx)
           }
         }
       }, 50);
@@ -693,17 +694,10 @@ export default {
     },
   },
   mounted() {
-    const list = this.$refs.lyricsContainer;
-    const docEle = document.documentElement;
     let timer;
-    list.addEventListener('wheel', e => {
+    this.$refs.scrollbox.addEventListener('wheel', e => {
       this.lyricScrolling = true;
-      let willto = this.lyriclistscroll - e.deltaY;
-      if (willto < -list.offsetHeight + docEle.clientHeight) {
-        willto = -list.offsetHeight + docEle.clientHeight;
-      }
-      if (willto > 0) willto = 0;
-      this.lyriclistscroll = willto;
+      this.scrollto(this.scroll - e.deltaY);
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         this.lyricScrolling = false;
@@ -789,7 +783,8 @@ export default {
 .left-side {
   flex: 1;
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
+  margin-left: 48px;
   margin-right: 32px;
   margin-top: 24px;
   align-items: center;
@@ -974,18 +969,19 @@ export default {
   font-weight: 600;
   font-size: 22px;
   color: var(--color-text);
-  margin-right: 60px;
+  margin-right: 48px;
   z-index: 0;
 
   .lyrics-container {
     position: absolute;
+    display: flex;
+    width: 100%;
+    flex-direction: column;
     top: 0;
-    padding-left: 78px;
-    max-width: 460px;
-    transition: 0.5s cubic-bezier(0.84, 0.03, 0.5, 1);
+    transition: 0.5s cubic-bezier(0.84, 0.03, 0.32, 0.91);
     scrollbar-width: none; // firefox
     &.scroll {
-      transition: 0.2s !important;
+      transition: 0.2s ease-out !important;
     }
     .line {
       position: relative;
@@ -1002,7 +998,7 @@ export default {
         width: calc(100% + 10px);
         height: calc(100% + 10px);
         background-color: var(--color-secondary-bg-for-transparent);
-        transform: translate(-50%, -50%);
+        transform:  translate(-50%, -50%);
         border-radius: 10px;
         transition: 0.35s;
         opacity: 0;
@@ -1014,6 +1010,7 @@ export default {
       }
       &.highlight {
         transform: scale(1.1);
+        height: fit-content;
       }
       &.highlight div.content {
         span {
@@ -1028,14 +1025,14 @@ export default {
       .content {
         transform-origin: center left;
         transform: scale(0.95);
-        transition: all 0.5s cubic-bezier(0.84, 0.03, 0.5, 1);
+        transition: all 0.5s cubic-bezier(0.84, 0.03, 0.32, 0.91);
         user-select: none;
 
         span {
           opacity: 0.28;
           cursor: default;
           font-size: 1em;
-          transition: all 0.5s cubic-bezier(0.84, 0.03, 0.5, 1);
+          transition: all 0.5s cubic-bezier(0.84, 0.03, 0.32, 0.91);
         }
 
         span.translation {
